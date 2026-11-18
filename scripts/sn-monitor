@@ -1,0 +1,11 @@
+#!/bin/bash
+# Open (or bring forward) the sn-monitor menu bar app.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+APP="$ROOT/dist/sn-monitor.app"
+if [ ! -d "$APP" ]; then
+    echo "sn-monitor.app not found at $APP" >&2
+    echo "Build it first: make -C \"$ROOT\" build" >&2
+    exit 1
+fi
+open "$APP"
