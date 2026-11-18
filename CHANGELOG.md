@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 - Automatic Dock icon fallback when the menu bar item is hidden by the notch.
 - "Show in Dock" and "Launch at login" settings.
 - CLI `snctl` with JSON and text output.
-- SwiftPM package layout, XCTest suite, and GitHub Actions CI.
+- SwiftPM package layout, Swift Testing suite, and GitHub Actions CI.
 
 ### Changed
 
