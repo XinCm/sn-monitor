@@ -154,7 +154,7 @@ final class ProcessDetailsViewController: NSViewController {
     func update(_ sample: ProcessSample) {
         cpuList.cpuReady = sample.cpuReady
         memoryList.cpuReady = sample.cpuReady
-        cpuList.emptyMessage = "等待 CPU 差值…"
+        cpuList.emptyMessage = "采样中…"
         cpuList.items = sample.cpuReady
             ? ProcessSampler.top(sample.usages, by: .cpu, limit: 10)
             : []
