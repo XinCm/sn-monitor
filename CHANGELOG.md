@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-11-19
+
+### Changed
+
+- Process details now run one continuous `top` child
+  (`-l 0 -s 2 -F -R -stats pid,cpu,mem`) while the window is open, instead of
+  spawning `ps`/`top` every tick. CPU comes from adjacent rounds, memory from
+  the `MEM` footprint column.
+- The list shows PID (including `kernel_task` PID 0) and full names resolved
+  from `ps` by PID.
+- First round has no CPU delta, so the CPU column shows "采样中"; memory is
+  available immediately.
+- Refresh interval is selectable (1/2/5 s, default 2 s) in the window.
+- Closing the window or quitting the app stops the `top` child; orphaned
+  children from a crash are cleaned on next launch.
+
 ## [0.1.4] - 2026-11-19
 
 ### Fixed

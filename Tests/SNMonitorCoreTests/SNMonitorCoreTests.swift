@@ -110,36 +110,32 @@ struct ProcessTests {
         #expect(top.map(\.name) == ["C", "A"])
     }
 
-    @Test("Parses ps output including system processes")
-    func parsePSOutput() {
-        let output = """
-          1   0.0   9104 /sbin/launchd
-        521 100.0 957312 /System/Library/Frameworks/CoreServices.framework/FSEvents.framework/Support/fseventsd
-        590  42.1 125424 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
-        """
-        let parsed = ProcessSampler.parsePS(output)
-        #expect(parsed.count == 3)
-        #expect(parsed[0].name == "launchd")
-        #expect(parsed[1].name == "fseventsd")
-        #expect(parsed[1].cpuPercent == 100.0)
-        #expect(parsed[1].memoryBytes == 957_312 * 1024)
-        #expect(parsed[2].name == "WindowServer")
+    @Test("Parses top rows including PID 0")
+    func parseTopRow() throws {
+        let row = try #require(ProcessSampler.parseRow("0      6.1   93M  "[...]))
+        #expect(row.pid == 0)
+        #expect(row.cpu == 6.1)
+        #expect(row.memory == 93 * 1024 * 1024)
+        #expect(ProcessSampler.parseRow("PID %CPU MEM"[...]) == nil)
     }
 
-    @Test("Parses top footprint output")
-    func parseTopMemory() {
+    @Test("Parses process names from ps")
+    func parsePSNames() {
         let output = """
-        PID    MEM
-        521    4089M
-        28299  1802M-
-        590    1032M+
+          1 /sbin/launchd
+        521 /System/Library/Frameworks/CoreServices.framework/FSEvents.framework/Support/fseventsd
+        590 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
         """
-        let footprints = ProcessSampler.parseTopMemory(output)
-        #expect(footprints[521] == 4089 * 1024 * 1024)
-        #expect(footprints[28299] == 1802 * 1024 * 1024)
-        #expect(footprints[590] == 1032 * 1024 * 1024)
+        let names = ProcessSampler.parsePSNames(output)
+        #expect(names[1] == "launchd")
+        #expect(names[521] == "fseventsd")
+        #expect(names[590] == "WindowServer")
+    }
 
+    @Test("Parses top memory units")
+    func memoryUnits() {
         #expect(ProcessSampler.parseMemory("512K") == 512 * 1024)
+        #expect(ProcessSampler.parseMemory("93M") == 93 * 1024 * 1024)
         #expect(ProcessSampler.parseMemory("1G") == 1024 * 1024 * 1024)
         #expect(ProcessSampler.parseMemory("N/A") == nil)
     }

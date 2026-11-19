@@ -11,21 +11,36 @@ final class ProcessListView: NSView {
         didSet { needsDisplay = true }
     }
 
+    var cpuReady = true {
+        didSet { needsDisplay = true }
+    }
+
+    var emptyMessage = "采样中…" {
+        didSet { needsDisplay = true }
+    }
+
     private let rowHeight: CGFloat = 26
     private let headerHeight: CGFloat = 24
     private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)
     private let nameFont = NSFont.systemFont(ofSize: 12)
-    private let rankFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+    private let smallFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
     private let headerFont = NSFont.systemFont(ofSize: 10, weight: .medium)
 
     override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
-        drawText("进程", rect: NSRect(x: 20, y: 4, width: 150, height: 14), font: headerFont, color: .secondaryLabelColor)
-        drawText("CPU", rect: NSRect(x: 176, y: 4, width: 58, height: 14), font: headerFont,
-                 color: sort == .cpu ? .controlAccentColor : .secondaryLabelColor, alignment: .right)
-        drawText("内存", rect: NSRect(x: 240, y: 4, width: 68, height: 14), font: headerFont,
-                 color: sort == .memory ? .controlAccentColor : .secondaryLabelColor, alignment: .right)
+        drawText("PID", rect: NSRect(x: 16, y: 4, width: 40, height: 14),
+                 font: headerFont, color: .secondaryLabelColor, alignment: .right)
+        drawText("进程", rect: NSRect(x: 60, y: 4, width: 126, height: 14),
+                 font: headerFont, color: .secondaryLabelColor)
+        drawText("CPU", rect: NSRect(x: 190, y: 4, width: 52, height: 14),
+                 font: headerFont,
+                 color: sort == .cpu ? .controlAccentColor : .secondaryLabelColor,
+                 alignment: .right)
+        drawText("内存", rect: NSRect(x: 246, y: 4, width: 62, height: 14),
+                 font: headerFont,
+                 color: sort == .memory ? .controlAccentColor : .secondaryLabelColor,
+                 alignment: .right)
 
         NSColor.separatorColor.withAlphaComponent(0.5).setStroke()
         let line = NSBezierPath()
@@ -35,7 +50,7 @@ final class ProcessListView: NSView {
         line.stroke()
 
         guard !items.isEmpty else {
-            drawText("采样中…", rect: NSRect(x: 0, y: headerHeight + 24, width: bounds.width, height: 18),
+            drawText(emptyMessage, rect: NSRect(x: 0, y: headerHeight + 24, width: bounds.width, height: 18),
                      font: nameFont, color: .tertiaryLabelColor, alignment: .center)
             return
         }
@@ -47,17 +62,19 @@ final class ProcessListView: NSView {
                 NSRect(x: 0, y: y, width: bounds.width, height: rowHeight).fill()
             }
 
-            drawText("\(index + 1)", rect: NSRect(x: 0, y: y + 6, width: 16, height: 14),
-                     font: rankFont, color: .tertiaryLabelColor, alignment: .right)
-            drawText(item.name, rect: NSRect(x: 20, y: y + 5, width: 150, height: 16),
+            drawText("\(index + 1)", rect: NSRect(x: 0, y: y + 7, width: 12, height: 14),
+                     font: smallFont, color: .tertiaryLabelColor, alignment: .right)
+            drawText(String(item.pid), rect: NSRect(x: 16, y: y + 6, width: 40, height: 14),
+                     font: smallFont, color: .tertiaryLabelColor, alignment: .right)
+            drawText(item.name, rect: NSRect(x: 60, y: y + 5, width: 126, height: 16),
                      font: nameFont, color: .labelColor, truncating: true)
-            drawText(String(format: "%.1f%%", item.cpuPercent),
-                     rect: NSRect(x: 176, y: y + 6, width: 58, height: 14),
+            let cpu = cpuReady ? String(format: "%.1f%%", item.cpuPercent) : "—"
+            drawText(cpu, rect: NSRect(x: 190, y: y + 6, width: 52, height: 14),
                      font: valueFont,
-                     color: sort == .cpu ? .labelColor : .secondaryLabelColor,
+                     color: sort == .cpu && cpuReady ? .labelColor : .secondaryLabelColor,
                      alignment: .right)
             drawText(Format.bytes(item.memoryBytes),
-                     rect: NSRect(x: 240, y: y + 6, width: 68, height: 14),
+                     rect: NSRect(x: 246, y: y + 6, width: 62, height: 14),
                      font: valueFont,
                      color: sort == .memory ? .labelColor : .secondaryLabelColor,
                      alignment: .right)
@@ -84,11 +101,15 @@ final class ProcessListView: NSView {
 }
 
 final class ProcessDetailsViewController: NSViewController {
+    var onIntervalChange: ((TimeInterval) -> Void)?
+
     private let cpuTitle = NSTextField(labelWithString: "CPU 占用 Top 10")
     private let memoryTitle = NSTextField(labelWithString: "内存占用 Top 10")
     private let cpuList = ProcessListView()
     private let memoryList = ProcessListView()
-    private let footer = NSTextField(labelWithString: "每秒刷新 · CPU 为 ps 口径 · 内存为 footprint")
+    private let footer = NSTextField(labelWithString: "")
+    private let intervalPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private var interval: TimeInterval = 2
 
     override func loadView() {
         let root = FlippedView(frame: NSRect(x: 0, y: 0, width: 680, height: 364))
@@ -109,14 +130,66 @@ final class ProcessDetailsViewController: NSViewController {
         footer.textColor = .tertiaryLabelColor
         root.addSubview(footer)
 
+        intervalPopup.addItems(withTitles: ["1 秒", "2 秒", "5 秒"])
+        for (index, value) in [1.0, 2.0, 5.0].enumerated() {
+            intervalPopup.item(at: index)?.tag = Int(value)
+        }
+        intervalPopup.target = self
+        intervalPopup.action = #selector(intervalChanged(_:))
+        intervalPopup.controlSize = .small
+        intervalPopup.font = .systemFont(ofSize: 10.5)
+        root.addSubview(intervalPopup)
+
         self.view = root
+        setInterval(interval)
+        markSampling()
     }
 
-    func update(_ usages: [ProcessUsage]) {
-        cpuList.items = ProcessSampler.top(usages, by: .cpu, limit: 10)
-        memoryList.items = ProcessSampler.top(usages, by: .memory, limit: 10)
-        footer.stringValue = "每秒刷新 · CPU 为 ps 口径 · 内存为 footprint · "
-            + Date().formatted(date: .omitted, time: .standard)
+    func setInterval(_ interval: TimeInterval) {
+        self.interval = interval
+        intervalPopup.selectItem(withTag: Int(interval))
+        updateFooter()
+    }
+
+    func update(_ sample: ProcessSample) {
+        cpuList.cpuReady = sample.cpuReady
+        memoryList.cpuReady = sample.cpuReady
+        cpuList.emptyMessage = "等待 CPU 差值…"
+        cpuList.items = sample.cpuReady
+            ? ProcessSampler.top(sample.usages, by: .cpu, limit: 10)
+            : []
+        memoryList.items = ProcessSampler.top(sample.usages, by: .memory, limit: 10)
+        updateFooter()
+    }
+
+    func markSampling() {
+        cpuList.cpuReady = false
+        memoryList.cpuReady = false
+        cpuList.emptyMessage = "正在采样…"
+        memoryList.emptyMessage = "正在采样…"
+        cpuList.items = []
+        memoryList.items = []
+        updateFooter()
+    }
+
+    func showStale() {
+        cpuList.cpuReady = false
+        memoryList.cpuReady = false
+        cpuList.emptyMessage = "采样失败，数据可能已过期"
+        memoryList.emptyMessage = "采样失败，数据可能已过期"
+        cpuList.items = []
+        memoryList.items = []
+        footer.stringValue = "采样失败 · 数据可能已过期"
+        footer.textColor = .systemOrange
+    }
+
+    private func updateFooter() {
+        footer.textColor = .tertiaryLabelColor
+        footer.stringValue = "每 \(Int(interval)) 秒更新 · CPU 100% = 一个核心 · 内存为 footprint"
+    }
+
+    @objc private func intervalChanged(_ sender: NSPopUpButton) {
+        onIntervalChange?(TimeInterval(sender.selectedTag()))
     }
 
     override func viewDidLayout() {
@@ -130,18 +203,22 @@ final class ProcessDetailsViewController: NSViewController {
         memoryTitle.frame = NSRect(x: margin + columnWidth + 20, y: 16, width: columnWidth, height: 18)
         cpuList.frame = NSRect(x: margin, y: listTop, width: columnWidth, height: listHeight)
         memoryList.frame = NSRect(x: margin + columnWidth + 20, y: listTop, width: columnWidth, height: listHeight)
-        footer.frame = NSRect(x: margin, y: 334, width: 640, height: 14)
+        footer.frame = NSRect(x: margin, y: 334, width: 540, height: 14)
+        intervalPopup.frame = NSRect(x: 596, y: 328, width: 64, height: 24)
     }
 }
 
 final class ProcessDetailsWindowController: NSWindowController, NSWindowDelegate {
     private let details = ProcessDetailsViewController()
-    private let sampler = ProcessSampler()
-    private let queue = DispatchQueue(label: "com.sean.snmonitor.processes", qos: .utility)
-    private var timer: DispatchSourceTimer?
-    private var running = false
+    private var sampler: ProcessSampler?
+    private var interval: TimeInterval = 2
 
     init() {
+        let saved = UserDefaults.standard.double(forKey: "detailsInterval")
+        if saved == 1 || saved == 2 || saved == 5 {
+            interval = saved
+        }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 364),
             styleMask: [.titled, .closable, .miniaturizable],
@@ -156,6 +233,11 @@ final class ProcessDetailsWindowController: NSWindowController, NSWindowDelegate
 
         window.contentViewController = details
         window.delegate = self
+
+        details.onIntervalChange = { [weak self] newInterval in
+            self?.changeInterval(newInterval)
+        }
+        details.setInterval(interval)
     }
 
     @available(*, unavailable)
@@ -166,11 +248,18 @@ final class ProcessDetailsWindowController: NSWindowController, NSWindowDelegate
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        start()
+        startSampling()
+    }
+
+    func stopSampling() {
+        sampler?.onSample = nil
+        sampler?.onError = nil
+        sampler?.stop()
+        sampler = nil
     }
 
     func windowWillClose(_ notification: Notification) {
-        stop()
+        stopSampling()
     }
 
     func snapshot(to path: String) {
@@ -196,37 +285,26 @@ final class ProcessDetailsWindowController: NSWindowController, NSWindowDelegate
         fflush(stdout)
     }
 
-    private func start() {
-        guard !running else { return }
-        running = true
-        sampler.reset()
-
-        queue.async { [weak self] in
-            guard let self else { return }
-            let usages = self.sampler.sample()
-            self.publish(usages)
-        }
-
-        let source = DispatchSource.makeTimerSource(queue: queue)
-        source.schedule(deadline: .now() + 1, repeating: 1, leeway: .milliseconds(150))
-        source.setEventHandler { [weak self] in
-            guard let self else { return }
-            let usages = self.sampler.sample()
-            self.publish(usages)
-        }
-        source.resume()
-        timer = source
+    private func changeInterval(_ newInterval: TimeInterval) {
+        guard newInterval != interval else { return }
+        interval = newInterval
+        UserDefaults.standard.set(newInterval, forKey: "detailsInterval")
+        details.setInterval(newInterval)
+        startSampling()
     }
 
-    private func publish(_ usages: [ProcessUsage]) {
-        DispatchQueue.main.async { [weak self] in
-            self?.details.update(usages)
-        }
-    }
+    private func startSampling() {
+        stopSampling()
+        details.markSampling()
 
-    private func stop() {
-        running = false
-        timer?.cancel()
-        timer = nil
+        let sampler = ProcessSampler()
+        sampler.onSample = { [weak self] sample in
+            self?.details.update(sample)
+        }
+        sampler.onError = { [weak self] in
+            self?.details.showStale()
+        }
+        self.sampler = sampler
+        sampler.start(interval: interval)
     }
 }

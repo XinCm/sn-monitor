@@ -16,7 +16,7 @@
 - **轻量**：常驻 footprint 约 11 MB，CPU 约 0.3% 单核
 - **菜单栏空间兜底**：图标被刘海遮住时自动启用 Dock 图标，`⌃⌥M` 可随时开关面板
 - **可配置菜单栏**：CPU + 内存 / CPU + 内存 + 温度 / CPU + 温度 / 仅 CPU / 仅图标
-- **进程详情**：点击面板顶部「详情 ›」查看 CPU / 内存占用前十的进程，每秒刷新
+- **进程详情**：点击面板顶部「详情 ›」查看 CPU / 内存占用前十，默认 2 秒刷新（可切 1/2/5 秒）
 - **CLI**：`snctl` 支持 JSON 与文本输出，方便脚本化
 - 无网络请求、无后台守护进程、无第三方依赖
 
@@ -68,10 +68,12 @@ open /Applications/sn-monitor.app
 点击面板顶部的 **详情 ›** 打开进程详情窗口：
 
 - 左列：CPU 占用 Top 10（% 单核，多线程可超过 100%）
-- 右列：内存占用 Top 10（RSS 驻留集）
-- 每秒刷新，关闭窗口即停止采样
-- 进程名和 CPU 来自 `/bin/ps`，因此包含 root 系统进程
-- 内存用 `proc_pid_rusage` 的 **phys_footprint**；root 进程读不到时，用打开窗口时的一次 `top` 快照补齐，所以数值接近活动监视器
+- 右列：内存占用 Top 10（footprint）
+- 显示 PID，方便区分多个同名 Helper；保留 kernel_task（PID 0）
+- 打开窗口时启动一个持续运行的 `top` 子进程，默认每 2 秒一轮；关闭窗口立即结束它
+- **第一轮只显示内存**，CPU 列显示「采样中」；从第二轮起 CPU 才有有效差值
+- 可在窗口右下角切换 1 / 2 / 5 秒刷新
+- 进程名由 `ps` 按 PID 关联，因此是完整名称，而不是 top 截断后的命令名
 
 详情窗口会遍历系统进程（约 600 个可读进程），打开期间 CPU 约增加 1–1.5% 单核；关闭后回到常驻水平。
 
@@ -91,7 +93,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | CPU | `host_statistics(HOST_CPU_LOAD_INFO)` | tick 差值；user(+nice) / system / idle；另显示 1 分钟负载 |
 | 内存 | `host_statistics64(HOST_VM_INFO64)` | App(anonymous - purgeable) + wired + compressed；含 swap 与内存压力 |
-| 进程 Top 10 | `/bin/ps` + `proc_pid_rusage` + 一次 `top` 快照 | 名称/CPU 来自 ps（含 root 系统进程）；内存为 footprint；root 进程的内存在窗口打开时用 top 补齐 |
+| 进程 Top 10 | 持续 `top -l 0 -s 2 -F -R -stats pid,cpu,mem` + `ps` 名称 | 含 root 系统进程与 kernel_task；CPU 为相邻轮次差值；内存为 footprint；仅详情窗口打开时运行 |
 | 磁盘容量 | `URLResourceValues.volumeAvailableCapacity` | 与 Finder / `df -H` 一致；30 秒缓存 |
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率（如 120Hz） |
@@ -107,7 +109,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | 面板关闭（仅菜单栏） | 11.1–11.5 MB | 0.25–0.34% |
 | 面板打开（1 秒更新） | 23–26 MB | 0.55–0.80% |
-| 详情窗口打开 | 约 80 MB（重绘时） | 约 1.6–2.5% |
+| 详情窗口打开 | 约 80 MB（重绘时） | 约 10–15%（含持续 top 子进程） |
 | 单次采样 | — | 0.6–3 ms |
 
 RSS 会显示 40MB+（包含共享库映射），判断轻重应看 footprint。菜单栏文字重绘是主要 CPU 来源；图标被遮挡时会跳过重绘。
@@ -173,7 +175,8 @@ SNM_SNAPSHOT=/tmp/panel.png .build/release/sn-monitor   # 把面板渲染成 PNG
 - 温度取代表性传感器最大值，不是每核精确读数，且每 2 秒更新一次
 - 刷新率是显示器名义值，不反映 ProMotion 动态帧率
 - 磁盘吞吐只统计整块物理盘，外接盘/磁盘镜像不计
-- 进程详情的 CPU 列是 `ps` 的近期平均值（非严格 1 秒差值）；内存为 footprint，root 进程取打开窗口时的 top 快照，可能略有滞后
+- 进程详情打开期间会持续运行 `top`，单核约占 10–15%，关闭窗口即停止；菜单栏常驻部分不受影响
+- 详情的第一轮没有 CPU 差值，CPU 列显示「采样中」
 - 菜单栏放不下时图标会被 macOS 隐藏，需要 Dock 图标或 `⌃⌥M` 兜底
 
 ## License

@@ -13,7 +13,7 @@ final class PanelViewController: NSViewController {
 
     private let headerLabel = NSTextField(labelWithString: "sn-monitor")
     private let intervalLabel = NSTextField(labelWithString: "1s")
-    private let versionLabel = NSTextField(labelWithString: "v0.1.4")
+    private let versionLabel = NSTextField(labelWithString: "v0.2.0")
     private let detailButton = NSButton(title: "详情 ›", target: nil, action: nil)
     private var rows: [MetricRowView] = []
 
@@ -142,7 +142,7 @@ final class PanelViewController: NSViewController {
     }
 
     func setMenuBarHint(_ hidden: Bool) {
-        versionLabel.stringValue = hidden ? "菜单栏已满 · ⌃⌥M" : "v0.1.4"
+        versionLabel.stringValue = hidden ? "菜单栏已满 · ⌃⌥M" : "v0.2.0"
         versionLabel.textColor = hidden ? .systemOrange : .tertiaryLabelColor
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SNMonitorCore
 import Carbon
 import ServiceManagement
@@ -60,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var lastTitle = ""
     private var interval: TimeInterval = 1.0
     private var menuBarContent: MenuBarContent = .cpuTemp
-    private lazy var processDetails = ProcessDetailsWindowController()
+    private var processDetails: ProcessDetailsWindowController?
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var statusItemHidden = false
@@ -84,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 return
             }
         }
+
+        cleanupOrphanedTop()
 
         let savedInterval = UserDefaults.standard.double(forKey: "refreshInterval")
         interval = savedInterval >= 0.2 ? savedInterval : 1.0
@@ -124,8 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 guard let self else { return }
                 self.showProcessDetails()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-                    self?.processDetails.snapshot(to: path)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+                    self?.processDetails?.snapshot(to: path)
                 }
             }
         }
@@ -153,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        processDetails?.stopSampling()
         engine?.stop()
         if let hotKeyRef {
             UnregisterEventHotKey(hotKeyRef)
@@ -172,6 +176,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     // MARK: - Setup
+
+    /// Removes a `top` child left behind by a previous crashed/killed instance.
+    private func cleanupOrphanedTop() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-Ao", "pid=,ppid=,command="]
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        guard (try? process.run()) != nil else { return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return }
+
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n") {
+            let fields = line
+                .split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+            guard fields.count == 3,
+                  let pid = Int32(fields[0]),
+                  let parent = Int32(fields[1]),
+                  parent == 1 else {
+                continue
+            }
+            let command = fields[2]
+            if command.contains("/usr/bin/top"),
+               command.contains("-l 0"),
+               command.contains("-stats pid,cpu,mem") {
+                kill(pid, SIGTERM)
+            }
+        }
+    }
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -470,7 +508,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if popover.isShown {
             popover.performClose(nil)
         }
-        processDetails.show()
+        let controller = processDetails ?? ProcessDetailsWindowController()
+        processDetails = controller
+        controller.show()
     }
 
     private func showSettingsMenu(relativeTo anchor: NSView? = nil) {
@@ -624,7 +664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "sn-monitor v0.1.4"
+        alert.messageText = "sn-monitor v0.2.0"
         alert.informativeText = """
         轻量 macOS 系统监视器：CPU、内存、磁盘、刷新率与温度。
 
