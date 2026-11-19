@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var lastTitle = ""
     private var interval: TimeInterval = 1.0
     private var menuBarContent: MenuBarContent = .cpuTemp
+    private lazy var processDetails = ProcessDetailsWindowController()
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var statusItemHidden = false
@@ -111,6 +112,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // always produces visible feedback, even if the menu bar is full.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             self?.checkStatusItemVisibility()
+        }
+
+        if ProcessInfo.processInfo.environment["SNM_SHOW_PROCESSES"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.showProcessDetails()
+            }
+        }
+
+        if let path = ProcessInfo.processInfo.environment["SNM_SNAPSHOT_PROCESSES"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                guard let self else { return }
+                self.showProcessDetails()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                    self?.processDetails.snapshot(to: path)
+                }
+            }
         }
 
         if ProcessInfo.processInfo.environment["SNM_STATS"] == "1" {
@@ -174,6 +191,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
         panel.onQuit = {
             NSApp.terminate(nil)
+        }
+        panel.onShowProcesses = { [weak self] in
+            self?.showProcessDetails()
         }
 
         popover = NSPopover()
@@ -446,6 +466,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 
+    private func showProcessDetails() {
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+        processDetails.show()
+    }
+
     private func showSettingsMenu(relativeTo anchor: NSView? = nil) {
         let menu = makeSettingsMenu()
         if let anchor {
@@ -597,7 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "sn-monitor v0.1.1"
+        alert.messageText = "sn-monitor v0.1.2"
         alert.informativeText = """
         轻量 macOS 系统监视器：CPU、内存、磁盘、刷新率与温度。
 

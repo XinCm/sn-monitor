@@ -16,6 +16,7 @@
 - **轻量**：常驻 footprint 约 11 MB，CPU 约 0.3% 单核
 - **菜单栏空间兜底**：图标被刘海遮住时自动启用 Dock 图标，`⌃⌥M` 可随时开关面板
 - **可配置菜单栏**：CPU + 内存 / CPU + 内存 + 温度 / CPU + 温度 / 仅 CPU / 仅图标
+- **进程详情**：点击面板顶部「详情 ›」查看 CPU / 内存占用前十的进程，每秒刷新
 - **CLI**：`snctl` 支持 JSON 与文本输出，方便脚本化
 - 无网络请求、无后台守护进程、无第三方依赖
 
@@ -60,6 +61,18 @@ open /Applications/sn-monitor.app
 - 菜单栏显示内容、刷新间隔、Dock 图标、开机启动都可以在设置里改
 - 开机启动使用 `SMAppService`，建议先把 app 放进 `/Applications`
 
+### 进程详情
+
+![进程详情](docs/processes.png)
+
+点击面板顶部的 **详情 ›** 打开进程详情窗口：
+
+- 左列：CPU 占用 Top 10（% 单核，多线程可超过 100%）
+- 右列：内存占用 Top 10（RSS 驻留集）
+- 每秒刷新，关闭窗口即停止采样
+
+详情窗口会遍历系统进程（约 600 个可读进程），打开期间 CPU 约增加 1–1.5% 单核；关闭后回到常驻水平。
+
 ### 菜单栏图标不见时
 
 macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并隐藏（进程仍在运行）。App 会检测这种情况：
@@ -76,6 +89,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | CPU | `host_statistics(HOST_CPU_LOAD_INFO)` | tick 差值；user(+nice) / system / idle；另显示 1 分钟负载 |
 | 内存 | `host_statistics64(HOST_VM_INFO64)` | App(anonymous - purgeable) + wired + compressed；含 swap 与内存压力 |
+| 进程 Top 10 | `libproc` (`proc_listpids` / `proc_pidinfo`) | CPU 为两次采样的时间差；内存为 RSS；仅详情窗口打开时采样 |
 | 磁盘容量 | `URLResourceValues.volumeAvailableCapacity` | 与 Finder / `df -H` 一致；30 秒缓存 |
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率（如 120Hz） |
@@ -91,6 +105,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | 面板关闭（仅菜单栏） | 11.1–11.5 MB | 0.25–0.34% |
 | 面板打开（1 秒更新） | 23–26 MB | 0.55–0.80% |
+| 详情窗口打开 | 约 38 MB 起（重绘瞬间更高） | 约 1.3–1.7% |
 | 单次采样 | — | 0.6–3 ms |
 
 RSS 会显示 40MB+（包含共享库映射），判断轻重应看 footprint。菜单栏文字重绘是主要 CPU 来源；图标被遮挡时会跳过重绘。
@@ -117,8 +132,8 @@ swift run snctl --text --watch --interval 1
 .
 ├── Package.swift
 ├── Sources/
-│   ├── SNMonitorCore/      # 采样库（CPU / 内存 / 磁盘 / 显示 / SMC / 引擎）
-│   ├── SNMonitorApp/      # AppKit 菜单栏与自绘面板
+│   ├── SNMonitorCore/      # 采样库（CPU / 内存 / 磁盘 / 显示 / SMC / 进程 / 引擎）
+│   ├── SNMonitorApp/      # AppKit 菜单栏、面板与进程详情窗口
 │   └── snctl/              # CLI
 ├── Tests/SNMonitorCoreTests/
 ├── Resources/              # Info.plist、AppIcon.icns
@@ -127,7 +142,8 @@ swift run snctl --text --watch --interval 1
 │   └── sn-monitor          # 打开 app 的启动脚本
 ├── docs/
 │   ├── DESIGN.md           # 设计说明
-│   └── panel.png
+│   ├── panel.png
+│   └── processes.png
 └── .github/workflows/ci.yml
 ```
 
@@ -155,6 +171,7 @@ SNM_SNAPSHOT=/tmp/panel.png .build/release/sn-monitor   # 把面板渲染成 PNG
 - 温度取代表性传感器最大值，不是每核精确读数，且每 2 秒更新一次
 - 刷新率是显示器名义值，不反映 ProMotion 动态帧率
 - 磁盘吞吐只统计整块物理盘，外接盘/磁盘镜像不计
+- 进程详情的内存列是 RSS，不是活动监视器的 footprint；部分系统进程可能无权读取
 - 菜单栏放不下时图标会被 macOS 隐藏，需要 Dock 图标或 `⌃⌥M` 兜底
 
 ## License

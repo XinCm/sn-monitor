@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2026-11-19
+
+### Added
+
+- Process details window with the top 10 processes by CPU and by memory, refreshed every second.
+
 ## [0.1.1] - 2026-11-18
 
 ### Added

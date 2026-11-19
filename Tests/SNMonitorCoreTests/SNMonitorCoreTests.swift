@@ -1,4 +1,5 @@
 import Testing
+import Darwin
 @testable import SNMonitorCore
 
 @Suite("SMC")
@@ -77,5 +78,51 @@ struct FormattingTests {
         #expect(Format.rate(1_048_576) == "1.0 MB/s")
         #expect(Format.diskBytes(684_591_751_168) == "685 GB")
         #expect(Format.diskBytes(UInt64(0)) == "0 B")
+    }
+}
+
+
+@Suite("Processes")
+struct ProcessTests {
+    private func usage(_ name: String, cpu: Double, memory: UInt64) -> ProcessUsage {
+        ProcessUsage(pid: 1, name: name, cpuPercent: cpu, memoryBytes: memory)
+    }
+
+    @Test("Top processes by CPU")
+    func topByCPU() {
+        let items = [
+            usage("A", cpu: 5, memory: 300),
+            usage("B", cpu: 30, memory: 100),
+            usage("C", cpu: 12, memory: 200),
+            usage("D", cpu: 30, memory: 50),
+        ]
+        let top = ProcessSampler.top(items, by: .cpu, limit: 3)
+        #expect(top.map(\.name) == ["B", "D", "C"])
+    }
+
+    @Test("Top processes by memory")
+    func topByMemory() {
+        let items = [
+            usage("A", cpu: 5, memory: 300),
+            usage("B", cpu: 30, memory: 100),
+            usage("C", cpu: 12, memory: 500),
+        ]
+        let top = ProcessSampler.top(items, by: .memory, limit: 2)
+        #expect(top.map(\.name) == ["C", "A"])
+    }
+
+    @Test("CPU percent from mach timebase")
+    func cpuPercent() {
+        var timebase = mach_timebase_info_data_t()
+        timebase.numer = 1
+        timebase.denom = 1
+        let percent = ProcessSampler.percent(
+            previous: 0,
+            current: 1_000_000_000,
+            wallNanos: 1_000_000_000,
+            timebase: timebase
+        )
+        #expect(abs(percent - 100) < 0.001)
+        #expect(ProcessSampler.percent(previous: 10, current: 5, wallNanos: 1, timebase: timebase) == 0)
     }
 }

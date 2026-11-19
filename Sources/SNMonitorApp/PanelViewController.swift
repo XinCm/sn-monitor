@@ -9,10 +9,12 @@ final class FlippedView: NSView {
 final class PanelViewController: NSViewController {
     var onSettings: ((NSView) -> Void)?
     var onQuit: (() -> Void)?
+    var onShowProcesses: (() -> Void)?
 
     private let headerLabel = NSTextField(labelWithString: "sn-monitor")
     private let intervalLabel = NSTextField(labelWithString: "1s")
-    private let versionLabel = NSTextField(labelWithString: "v0.1.1")
+    private let versionLabel = NSTextField(labelWithString: "v0.1.2")
+    private let detailButton = NSButton(title: "详情 ›", target: nil, action: nil)
     private var rows: [MetricRowView] = []
 
     override func loadView() {
@@ -29,6 +31,14 @@ final class PanelViewController: NSViewController {
         panel.addSubview(headerLabel)
         panel.addSubview(intervalLabel)
         panel.addSubview(versionLabel)
+
+        detailButton.isBordered = false
+        detailButton.font = .systemFont(ofSize: 11)
+        detailButton.contentTintColor = .secondaryLabelColor
+        detailButton.target = self
+        detailButton.action = #selector(detailsPressed)
+        detailButton.toolTip = "查看 CPU / 内存占用前十的进程"
+        panel.addSubview(detailButton)
 
         let definitions: [(String, NSColor)] = [
             ("CPU", .systemBlue),
@@ -132,7 +142,7 @@ final class PanelViewController: NSViewController {
     }
 
     func setMenuBarHint(_ hidden: Bool) {
-        versionLabel.stringValue = hidden ? "菜单栏已满 · ⌃⌥M" : "v0.1.1"
+        versionLabel.stringValue = hidden ? "菜单栏已满 · ⌃⌥M" : "v0.1.2"
         versionLabel.textColor = hidden ? .systemOrange : .tertiaryLabelColor
     }
 
@@ -151,6 +161,10 @@ final class PanelViewController: NSViewController {
         return button
     }
 
+    @objc private func detailsPressed() {
+        onShowProcesses?()
+    }
+
     @objc private func settingsPressed(_ sender: NSButton) {
         onSettings?(sender)
     }
@@ -161,8 +175,9 @@ final class PanelViewController: NSViewController {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        headerLabel.frame = NSRect(x: 12, y: 12, width: 200, height: 18)
-        intervalLabel.frame = NSRect(x: 240, y: 13, width: 68, height: 16)
+        headerLabel.frame = NSRect(x: 12, y: 12, width: 180, height: 18)
+        detailButton.frame = NSRect(x: 184, y: 11, width: 50, height: 20)
+        intervalLabel.frame = NSRect(x: 244, y: 13, width: 64, height: 16)
         versionLabel.frame = NSRect(x: 12, y: 376, width: 170, height: 14)
     }
 }

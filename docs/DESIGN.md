@@ -13,6 +13,7 @@
 
 - 菜单栏显示 CPU + 内存（默认），可切换为包含温度、仅 CPU、仅图标
 - 点击状态项打开 NSPopover 面板：5 行指标 + 最近 120 个采样的折线
+- 面板顶部「详情 ›」打开进程详情窗口：CPU / 内存 Top 10，每秒刷新
 - 右键或面板齿轮打开设置：刷新间隔、菜单栏内容、Dock、开机启动、关于、退出
 - `⌃⌥M` 全局快捷键开关面板
 - 菜单栏空间不足时（图标被刘海遮住）自动启用 Dock 图标兜底
@@ -29,6 +30,7 @@ Sources/
 │   ├── DisplaySampler.swift
 │   ├── SMCClient.swift     80 字节 AppleSMC ABI
 │   ├── ThermalSampler.swift 候选 key 探测 + 2s 缓存
+│   ├── ProcessSampler.swift libproc 进程 CPU / 内存 Top 10
 │   ├── MetricsCollector.swift
 │   └── MetricsEngine.swift DispatchSourceTimer
 ├── SNMonitorApp/           AppKit 状态栏与自绘面板
@@ -47,6 +49,7 @@ Sources/
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率 |
 | 温度 | AppleSMC（私有 IOKit API） | 启动探测候选 key；CPU 取 4 个、GPU 2 个、电池 1 个；2s 刷新 |
+| 进程 Top 10 | `proc_listpids` + `proc_pidinfo` | CPU 为 mach 时间差；内存为 RSS；仅详情窗口打开时按 1s 采样 |
 
 单位：内存用二进制（24.0 GB = 24 GiB），磁盘用十进制（685 GB），速率用二进制。
 
@@ -57,12 +60,21 @@ Sources/
 - 读不到时显示 `—`，不影响其他指标
 - SMC 是私有 API，不能上架 App Store
 
+### 进程详情
+
+- 打开窗口后创建独立的 `ProcessSampler` 和 1s 定时器，关闭窗口即停止
+- 遍历约 600 个可读进程；`proc_taskinfo` 的时间单位是 mach absolute time，用 `mach_timebase_info` 转成纳秒
+- 进程名按 PID 缓存，避免每秒重复调用 `proc_name`
+- 内存列为 RSS（`pti_resident_size`），不是 Activity Monitor 的 footprint
+- 详情窗口按需打开，属可接受的额外开销；常驻状态仍保持约 11 MB
+
 ## 资源占用（M5 / macOS 26 实测）
 
 | 状态 | footprint | CPU（单核） |
 | --- | --- | --- |
 | 面板关闭 | 11.1–11.5 MB | 0.25–0.34% |
 | 面板打开 | 23–26 MB | 0.55–0.80% |
+| 详情窗口 | 约 38 MB 起（重绘瞬间更高） | 1.3–1.7% |
 | 单次采样 | — | 0.6–3 ms |
 
 菜单栏文字重绘是最大单项成本。图标被遮挡时会跳过重绘。
