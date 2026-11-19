@@ -624,7 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "sn-monitor v0.1.2"
+        alert.messageText = "sn-monitor v0.1.3"
         alert.informativeText = """
         轻量 macOS 系统监视器：CPU、内存、磁盘、刷新率与温度。
 

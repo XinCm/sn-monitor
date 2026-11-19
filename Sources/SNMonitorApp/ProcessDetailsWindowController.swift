@@ -88,7 +88,7 @@ final class ProcessDetailsViewController: NSViewController {
     private let memoryTitle = NSTextField(labelWithString: "内存占用 Top 10")
     private let cpuList = ProcessListView()
     private let memoryList = ProcessListView()
-    private let footer = NSTextField(labelWithString: "每秒刷新 · 内存为 RSS 驻留集")
+    private let footer = NSTextField(labelWithString: "每秒刷新 · ps 口径 · 内存为 RSS 驻留集")
 
     override func loadView() {
         let root = FlippedView(frame: NSRect(x: 0, y: 0, width: 680, height: 364))
@@ -115,7 +115,7 @@ final class ProcessDetailsViewController: NSViewController {
     func update(_ usages: [ProcessUsage]) {
         cpuList.items = ProcessSampler.top(usages, by: .cpu, limit: 10)
         memoryList.items = ProcessSampler.top(usages, by: .memory, limit: 10)
-        footer.stringValue = "每秒刷新 · 内存为 RSS 驻留集 · "
+        footer.stringValue = "每秒刷新 · ps 口径 · 内存为 RSS 驻留集 · "
             + Date().formatted(date: .omitted, time: .standard)
     }
 

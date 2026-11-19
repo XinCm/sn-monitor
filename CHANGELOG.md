@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2026-11-19
+
+### Fixed
+
+- Process details now use `/bin/ps` instead of `proc_pidinfo`, so root-owned
+  system processes (fseventsd, WindowServer, ...) are included and the ranking
+  matches `ps` / Activity Monitor more closely.
+
 ## [0.1.2] - 2026-11-19
 
 ### Added

@@ -1,5 +1,4 @@
 import Testing
-import Darwin
 @testable import SNMonitorCore
 
 @Suite("SMC")
@@ -111,18 +110,19 @@ struct ProcessTests {
         #expect(top.map(\.name) == ["C", "A"])
     }
 
-    @Test("CPU percent from mach timebase")
-    func cpuPercent() {
-        var timebase = mach_timebase_info_data_t()
-        timebase.numer = 1
-        timebase.denom = 1
-        let percent = ProcessSampler.percent(
-            previous: 0,
-            current: 1_000_000_000,
-            wallNanos: 1_000_000_000,
-            timebase: timebase
-        )
-        #expect(abs(percent - 100) < 0.001)
-        #expect(ProcessSampler.percent(previous: 10, current: 5, wallNanos: 1, timebase: timebase) == 0)
+    @Test("Parses ps output including system processes")
+    func parsePSOutput() {
+        let output = """
+          1   0.0   9104 /sbin/launchd
+        521 100.0 957312 /System/Library/Frameworks/CoreServices.framework/FSEvents.framework/Support/fseventsd
+        590  42.1 125424 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+        """
+        let parsed = ProcessSampler.parse(output)
+        #expect(parsed.count == 3)
+        #expect(parsed[0].name == "launchd")
+        #expect(parsed[1].name == "fseventsd")
+        #expect(parsed[1].cpuPercent == 100.0)
+        #expect(parsed[1].memoryBytes == 957_312 * 1024)
+        #expect(parsed[2].name == "WindowServer")
     }
 }

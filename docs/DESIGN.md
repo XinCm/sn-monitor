@@ -49,7 +49,7 @@ Sources/
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率 |
 | 温度 | AppleSMC（私有 IOKit API） | 启动探测候选 key；CPU 取 4 个、GPU 2 个、电池 1 个；2s 刷新 |
-| 进程 Top 10 | `proc_listpids` + `proc_pidinfo` | CPU 为 mach 时间差；内存为 RSS；仅详情窗口打开时按 1s 采样 |
+| 进程 Top 10 | `/bin/ps -Ao pid,pcpu,rss,comm` | 含 root 系统进程；CPU 为 ps 口径；内存为 RSS；仅详情窗口打开时按 1s 采样 |
 
 单位：内存用二进制（24.0 GB = 24 GiB），磁盘用十进制（685 GB），速率用二进制。
 
@@ -63,9 +63,9 @@ Sources/
 ### 进程详情
 
 - 打开窗口后创建独立的 `ProcessSampler` 和 1s 定时器，关闭窗口即停止
-- 遍历约 600 个可读进程；`proc_taskinfo` 的时间单位是 mach absolute time，用 `mach_timebase_info` 转成纳秒
-- 进程名按 PID 缓存，避免每秒重复调用 `proc_name`
-- 内存列为 RSS（`pti_resident_size`），不是 Activity Monitor 的 footprint
+- 使用 `/bin/ps -Ao pid=,pcpu=,rss=,comm=`，而不是 `proc_pidinfo`：后者以普通用户身份读不到 root 进程，会把 fseventsd、WindowServer 等高占用系统进程漏掉，导致排行失真
+- `ps` 在 macOS 上是 setuid root，能给出与 `ps` / 活动监视器接近的完整排行；每次调用约 30ms，仅在详情窗口打开时发生
+- 内存列为 RSS，CPU 为 `ps` 的近期平均值
 - 详情窗口按需打开，属可接受的额外开销；常驻状态仍保持约 11 MB
 
 ## 资源占用（M5 / macOS 26 实测）

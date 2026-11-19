@@ -1,5 +1,4 @@
 import Foundation
-import Darwin
 
 /// One process entry for the details window.
 public struct ProcessUsage: Sendable, Identifiable {
@@ -25,67 +24,39 @@ public enum ProcessSort: Sendable {
     case memory
 }
 
-/// Reads per-process CPU and memory with libproc.
+/// Process list for the details window.
 ///
-/// CPU percentages are deltas of `proc_taskinfo` times, so the first sample is
-/// always 0%; call `reset()` before starting a new observation window.
-/// Not thread-safe: use from a single sampling queue.
+/// `ps` is used instead of `proc_pidinfo` because the latter cannot read
+/// root-owned processes as a normal user; the top CPU consumer is often a
+/// system daemon (fseventsd, WindowServer, ...). `ps` is setuid root on macOS
+/// and therefore matches what users see in Activity Monitor / `ps`.
 public final class ProcessSampler {
-    private var previousCPUTicks: [Int32: UInt64] = [:]
-    private var previousTimestamp: UInt64?
-    private var nameCache: [Int32: String] = [:]
-    private let timebase: mach_timebase_info_data_t
-
-    public init() {
-        var info = mach_timebase_info_data_t()
-        mach_timebase_info(&info)
-        timebase = info
-    }
+    public init() {}
 
     public func reset() {
-        previousCPUTicks.removeAll()
-        previousTimestamp = nil
-        nameCache.removeAll()
+        // No baseline is needed: `ps` already reports a recent CPU percentage.
     }
 
     public func sample() -> [ProcessUsage] {
-        let now = DispatchTime.now().uptimeNanoseconds
-        let wallNanos = previousTimestamp.map { Double(now - $0) } ?? 0
-        var currentTicks: [Int32: UInt64] = [:]
-        var currentNames: [Int32: String] = [:]
-        var usages: [ProcessUsage] = []
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/ps")
+        process.arguments = ["-Ao", "pid=,pcpu=,rss=,comm="]
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
-        for pid in Self.listPIDs() {
-            guard let info = Self.taskInfo(pid) else { continue }
-            let ticks = info.pti_total_user + info.pti_total_system
-            currentTicks[pid] = ticks
+        let pipe = Pipe()
+        process.standardOutput = pipe
 
-            var percent = 0.0
-            if wallNanos > 50_000_000,
-               let previous = previousCPUTicks[pid],
-               ticks > previous {
-                percent = Self.percent(
-                    previous: previous,
-                    current: ticks,
-                    wallNanos: wallNanos,
-                    timebase: timebase
-                )
-            }
-
-            let name = nameCache[pid] ?? Self.resolveName(of: pid)
-            currentNames[pid] = name
-            usages.append(ProcessUsage(
-                pid: pid,
-                name: name,
-                cpuPercent: percent,
-                memoryBytes: info.pti_resident_size
-            ))
+        do {
+            try process.run()
+        } catch {
+            return []
         }
 
-        previousCPUTicks = currentTicks
-        nameCache = currentNames
-        previousTimestamp = now
-        return usages
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return [] }
+        return Self.parse(String(decoding: data, as: UTF8.self))
     }
 
     public static func top(
@@ -107,62 +78,28 @@ public final class ProcessSampler {
         return Array(sorted.prefix(limit))
     }
 
-    static func percent(
-        previous: UInt64,
-        current: UInt64,
-        wallNanos: Double,
-        timebase: mach_timebase_info_data_t
-    ) -> Double {
-        guard current > previous, wallNanos > 0 else { return 0 }
-        let deltaTicks = Double(current - previous)
-        let deltaNanos = deltaTicks * Double(timebase.numer) / Double(timebase.denom)
-        return deltaNanos / wallNanos * 100
-    }
+    /// Parses `ps -Ao pid=,pcpu=,rss=,comm=` output.
+    static func parse(_ output: String) -> [ProcessUsage] {
+        var usages: [ProcessUsage] = []
+        for line in output.split(separator: "\n") {
+            let fields = line.split(separator: " ", maxSplits: 3, omittingEmptySubsequences: true)
+            guard fields.count == 4,
+                  let pid = Int32(fields[0]),
+                  pid > 0,
+                  let cpu = Double(fields[1]),
+                  let rssKB = UInt64(fields[2]) else {
+                continue
+            }
 
-    // MARK: - libproc
-
-    private static func listPIDs() -> [Int32] {
-        let byteCount = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
-        guard byteCount > 0 else { return [] }
-
-        let capacity = max(64, Int(byteCount) / MemoryLayout<pid_t>.size + 32)
-        var pids = [pid_t](repeating: 0, count: capacity)
-        let used = proc_listpids(
-            UInt32(PROC_ALL_PIDS),
-            0,
-            &pids,
-            Int32(capacity * MemoryLayout<pid_t>.size)
-        )
-        guard used > 0 else { return [] }
-
-        let count = min(capacity, Int(used) / MemoryLayout<pid_t>.size)
-        var seen = Set<pid_t>()
-        return pids.prefix(count).filter { pid in
-            pid > 0 && seen.insert(pid).inserted
+            let command = String(fields[3])
+            let name = URL(fileURLWithPath: command).lastPathComponent
+            usages.append(ProcessUsage(
+                pid: pid,
+                name: name.isEmpty ? "PID \(pid)" : name,
+                cpuPercent: cpu,
+                memoryBytes: rssKB * 1024
+            ))
         }
-    }
-
-    private static func taskInfo(_ pid: Int32) -> proc_taskinfo? {
-        var info = proc_taskinfo()
-        let size = Int32(MemoryLayout<proc_taskinfo>.size)
-        let result = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)
-        return result == size ? info : nil
-    }
-
-    private static func resolveName(of pid: Int32) -> String {
-        var buffer = [CChar](repeating: 0, count: 256)
-        if proc_name(pid, &buffer, UInt32(buffer.count)) > 0 {
-            let name = String(cString: buffer)
-            if !name.isEmpty { return name }
-        }
-
-        var path = [CChar](repeating: 0, count: 1024)
-        if proc_pidpath(pid, &path, UInt32(path.count)) > 0 {
-            let fullPath = String(cString: path)
-            let last = URL(fileURLWithPath: fullPath).lastPathComponent
-            if !last.isEmpty { return last }
-        }
-
-        return "PID \(pid)"
+        return usages
     }
 }

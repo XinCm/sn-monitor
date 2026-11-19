@@ -70,6 +70,7 @@ open /Applications/sn-monitor.app
 - 左列：CPU 占用 Top 10（% 单核，多线程可超过 100%）
 - 右列：内存占用 Top 10（RSS 驻留集）
 - 每秒刷新，关闭窗口即停止采样
+- 数据来自 `/bin/ps`，因此包含 root 系统进程；排序和 `ps` 基本一致
 
 详情窗口会遍历系统进程（约 600 个可读进程），打开期间 CPU 约增加 1–1.5% 单核；关闭后回到常驻水平。
 
@@ -89,7 +90,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | CPU | `host_statistics(HOST_CPU_LOAD_INFO)` | tick 差值；user(+nice) / system / idle；另显示 1 分钟负载 |
 | 内存 | `host_statistics64(HOST_VM_INFO64)` | App(anonymous - purgeable) + wired + compressed；含 swap 与内存压力 |
-| 进程 Top 10 | `libproc` (`proc_listpids` / `proc_pidinfo`) | CPU 为两次采样的时间差；内存为 RSS；仅详情窗口打开时采样 |
+| 进程 Top 10 | `/bin/ps -Ao pid,pcpu,rss,comm` | 含 root 系统进程（fseventsd / WindowServer 等）；CPU 为 ps 口径，内存为 RSS；仅详情窗口打开时采样 |
 | 磁盘容量 | `URLResourceValues.volumeAvailableCapacity` | 与 Finder / `df -H` 一致；30 秒缓存 |
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率（如 120Hz） |
@@ -171,7 +172,7 @@ SNM_SNAPSHOT=/tmp/panel.png .build/release/sn-monitor   # 把面板渲染成 PNG
 - 温度取代表性传感器最大值，不是每核精确读数，且每 2 秒更新一次
 - 刷新率是显示器名义值，不反映 ProMotion 动态帧率
 - 磁盘吞吐只统计整块物理盘，外接盘/磁盘镜像不计
-- 进程详情的内存列是 RSS，不是活动监视器的 footprint；部分系统进程可能无权读取
+- 进程详情的 CPU 列是 `ps` 的近期平均值（非严格 1 秒差值），内存列是 RSS，均与活动监视器口径略有差异
 - 菜单栏放不下时图标会被 macOS 隐藏，需要 Dock 图标或 `⌃⌥M` 兜底
 
 ## License
