@@ -117,12 +117,30 @@ struct ProcessTests {
         521 100.0 957312 /System/Library/Frameworks/CoreServices.framework/FSEvents.framework/Support/fseventsd
         590  42.1 125424 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
         """
-        let parsed = ProcessSampler.parse(output)
+        let parsed = ProcessSampler.parsePS(output)
         #expect(parsed.count == 3)
         #expect(parsed[0].name == "launchd")
         #expect(parsed[1].name == "fseventsd")
         #expect(parsed[1].cpuPercent == 100.0)
         #expect(parsed[1].memoryBytes == 957_312 * 1024)
         #expect(parsed[2].name == "WindowServer")
+    }
+
+    @Test("Parses top footprint output")
+    func parseTopMemory() {
+        let output = """
+        PID    MEM
+        521    4089M
+        28299  1802M-
+        590    1032M+
+        """
+        let footprints = ProcessSampler.parseTopMemory(output)
+        #expect(footprints[521] == 4089 * 1024 * 1024)
+        #expect(footprints[28299] == 1802 * 1024 * 1024)
+        #expect(footprints[590] == 1032 * 1024 * 1024)
+
+        #expect(ProcessSampler.parseMemory("512K") == 512 * 1024)
+        #expect(ProcessSampler.parseMemory("1G") == 1024 * 1024 * 1024)
+        #expect(ProcessSampler.parseMemory("N/A") == nil)
     }
 }

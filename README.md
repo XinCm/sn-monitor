@@ -70,7 +70,8 @@ open /Applications/sn-monitor.app
 - 左列：CPU 占用 Top 10（% 单核，多线程可超过 100%）
 - 右列：内存占用 Top 10（RSS 驻留集）
 - 每秒刷新，关闭窗口即停止采样
-- 数据来自 `/bin/ps`，因此包含 root 系统进程；排序和 `ps` 基本一致
+- 进程名和 CPU 来自 `/bin/ps`，因此包含 root 系统进程
+- 内存用 `proc_pid_rusage` 的 **phys_footprint**；root 进程读不到时，用打开窗口时的一次 `top` 快照补齐，所以数值接近活动监视器
 
 详情窗口会遍历系统进程（约 600 个可读进程），打开期间 CPU 约增加 1–1.5% 单核；关闭后回到常驻水平。
 
@@ -90,7 +91,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | CPU | `host_statistics(HOST_CPU_LOAD_INFO)` | tick 差值；user(+nice) / system / idle；另显示 1 分钟负载 |
 | 内存 | `host_statistics64(HOST_VM_INFO64)` | App(anonymous - purgeable) + wired + compressed；含 swap 与内存压力 |
-| 进程 Top 10 | `/bin/ps -Ao pid,pcpu,rss,comm` | 含 root 系统进程（fseventsd / WindowServer 等）；CPU 为 ps 口径，内存为 RSS；仅详情窗口打开时采样 |
+| 进程 Top 10 | `/bin/ps` + `proc_pid_rusage` + 一次 `top` 快照 | 名称/CPU 来自 ps（含 root 系统进程）；内存为 footprint；root 进程的内存在窗口打开时用 top 补齐 |
 | 磁盘容量 | `URLResourceValues.volumeAvailableCapacity` | 与 Finder / `df -H` 一致；30 秒缓存 |
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率（如 120Hz） |
@@ -106,7 +107,7 @@ macOS 菜单栏空间不足时，多出来的图标会被放到刘海下面并�
 | --- | --- | --- |
 | 面板关闭（仅菜单栏） | 11.1–11.5 MB | 0.25–0.34% |
 | 面板打开（1 秒更新） | 23–26 MB | 0.55–0.80% |
-| 详情窗口打开 | 约 38 MB 起（重绘瞬间更高） | 约 1.3–1.7% |
+| 详情窗口打开 | 约 80 MB（重绘时） | 约 1.6–2.5% |
 | 单次采样 | — | 0.6–3 ms |
 
 RSS 会显示 40MB+（包含共享库映射），判断轻重应看 footprint。菜单栏文字重绘是主要 CPU 来源；图标被遮挡时会跳过重绘。
@@ -172,7 +173,7 @@ SNM_SNAPSHOT=/tmp/panel.png .build/release/sn-monitor   # 把面板渲染成 PNG
 - 温度取代表性传感器最大值，不是每核精确读数，且每 2 秒更新一次
 - 刷新率是显示器名义值，不反映 ProMotion 动态帧率
 - 磁盘吞吐只统计整块物理盘，外接盘/磁盘镜像不计
-- 进程详情的 CPU 列是 `ps` 的近期平均值（非严格 1 秒差值），内存列是 RSS，均与活动监视器口径略有差异
+- 进程详情的 CPU 列是 `ps` 的近期平均值（非严格 1 秒差值）；内存为 footprint，root 进程取打开窗口时的 top 快照，可能略有滞后
 - 菜单栏放不下时图标会被 macOS 隐藏，需要 Dock 图标或 `⌃⌥M` 兜底
 
 ## License

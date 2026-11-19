@@ -49,7 +49,7 @@ Sources/
 | 磁盘吞吐 | `IOBlockStorageDriver.Statistics` | 只统计整块物理盘，过滤磁盘镜像和 APFS 虚拟盘 |
 | 刷新率 | `CGDisplayCopyDisplayMode` | 主显示器名义刷新率 |
 | 温度 | AppleSMC（私有 IOKit API） | 启动探测候选 key；CPU 取 4 个、GPU 2 个、电池 1 个；2s 刷新 |
-| 进程 Top 10 | `/bin/ps -Ao pid,pcpu,rss,comm` | 含 root 系统进程；CPU 为 ps 口径；内存为 RSS；仅详情窗口打开时按 1s 采样 |
+| 进程 Top 10 | `ps` + `proc_pid_rusage` + 一次 `top` 快照 | 名称/CPU 来自 ps（含 root 系统进程）；内存为 footprint；仅详情窗口打开时采样 |
 
 单位：内存用二进制（24.0 GB = 24 GiB），磁盘用十进制（685 GB），速率用二进制。
 
@@ -63,9 +63,9 @@ Sources/
 ### 进程详情
 
 - 打开窗口后创建独立的 `ProcessSampler` 和 1s 定时器，关闭窗口即停止
-- 使用 `/bin/ps -Ao pid=,pcpu=,rss=,comm=`，而不是 `proc_pidinfo`：后者以普通用户身份读不到 root 进程，会把 fseventsd、WindowServer 等高占用系统进程漏掉，导致排行失真
-- `ps` 在 macOS 上是 setuid root，能给出与 `ps` / 活动监视器接近的完整排行；每次调用约 30ms，仅在详情窗口打开时发生
-- 内存列为 RSS，CPU 为 `ps` 的近期平均值
+- 名称/CPU 来自 `/bin/ps`：普通用户用 `proc_pidinfo` 读不到 root 进程，会把 fseventsd、WindowServer 漏掉；ps 是 setuid root，能给出完整排行。CPU 是 ps 的近期平均值
+- 内存优先用 `proc_pid_rusage` 的 `ri_phys_footprint`（活动监视器口径），而不是 RSS
+- root 进程的 rusage 会失败，因此在窗口打开时跑一次 `top -l 1 -stats pid,mem` 取得它们的 footprint 并缓存；之后每秒只跑 ps + rusage（约 50ms），不在循环里跑 top（top 单次约 0.8s CPU）
 - 详情窗口按需打开，属可接受的额外开销；常驻状态仍保持约 11 MB
 
 ## 资源占用（M5 / macOS 26 实测）
@@ -74,7 +74,7 @@ Sources/
 | --- | --- | --- |
 | 面板关闭 | 11.1–11.5 MB | 0.25–0.34% |
 | 面板打开 | 23–26 MB | 0.55–0.80% |
-| 详情窗口 | 约 38 MB 起（重绘瞬间更高） | 1.3–1.7% |
+| 详情窗口 | 约 80 MB（重绘时） | 1.6–2.5% |
 | 单次采样 | — | 0.6–3 ms |
 
 菜单栏文字重绘是最大单项成本。图标被遮挡时会跳过重绘。

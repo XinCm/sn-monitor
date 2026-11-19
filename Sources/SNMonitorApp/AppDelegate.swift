@@ -124,7 +124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 guard let self else { return }
                 self.showProcessDetails()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                     self?.processDetails.snapshot(to: path)
                 }
             }
@@ -624,7 +624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "sn-monitor v0.1.3"
+        alert.messageText = "sn-monitor v0.1.4"
         alert.informativeText = """
         轻量 macOS 系统监视器：CPU、内存、磁盘、刷新率与温度。
 

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2026-11-19
+
+### Fixed
+
+- Process details now show **footprint** instead of RSS, so memory rankings
+  match Activity Monitor much more closely. User processes use
+  `proc_pid_rusage`; root processes are filled from a one-time `top` snapshot
+  when the window opens. CPU keeps the complete `ps` ranking.
+
 ## [0.1.3] - 2026-11-19
 
 ### Fixed
