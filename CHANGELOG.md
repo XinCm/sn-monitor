@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-11-19
+
+### Changed
+
+- Command-line launches (`--no-dock`, or a process with `TERM` set) no longer
+  enable the automatic Dock icon fallback. The `sn-monitor` launcher passes
+  `--no-dock`; double-clicking the app still keeps the fallback.
+
 ## [0.2.0] - 2026-11-19
 
 ### Changed

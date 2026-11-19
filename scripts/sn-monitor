@@ -8,4 +8,4 @@ if [ ! -d "$APP" ]; then
     echo "Build it first: make -C \"$ROOT\" build" >&2
     exit 1
 fi
-open "$APP"
+open "$APP" --args --no-dock

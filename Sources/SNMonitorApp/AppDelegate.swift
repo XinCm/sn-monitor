@@ -65,6 +65,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandlerRef: EventHandlerRef?
     private var statusItemHidden = false
+
+    /// Command-line launches should never create a Dock icon for this tool.
+    private var suppressesDockFallback: Bool {
+        CommandLine.arguments.contains("--no-dock")
+            || ProcessInfo.processInfo.environment["TERM"] != nil
+    }
     private var suppressReopenUntil: Date?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -94,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             rawValue: UserDefaults.standard.string(forKey: "menuBarContent") ?? ""
         ) ?? .cpuMemory
 
-        if UserDefaults.standard.bool(forKey: "showDockIcon") {
+        if !suppressesDockFallback, UserDefaults.standard.bool(forKey: "showDockIcon") {
             NSApp.setActivationPolicy(.regular)
         }
 
@@ -462,7 +468,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         panel.setMenuBarHint(hidden)
         guard hidden else { return }
 
-        if !UserDefaults.standard.bool(forKey: "showDockIcon"),
+        if !suppressesDockFallback,
+           !UserDefaults.standard.bool(forKey: "showDockIcon"),
            !UserDefaults.standard.bool(forKey: "didAutoDockFallback") {
             UserDefaults.standard.set(true, forKey: "didAutoDockFallback")
             UserDefaults.standard.set(true, forKey: "showDockIcon")
@@ -578,7 +585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             keyEquivalent: ""
         )
         dockItem.target = self
-        dockItem.state = UserDefaults.standard.bool(forKey: "showDockIcon") ? .on : .off
+        dockItem.state = NSApp.activationPolicy() == .regular ? .on : .off
         menu.addItem(dockItem)
 
         let loginItem = NSMenuItem(
@@ -664,7 +671,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     @objc private func showAbout() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "sn-monitor v0.2.0"
+        alert.messageText = "sn-monitor v0.2.1"
         alert.informativeText = """
         轻量 macOS 系统监视器：CPU、内存、磁盘、刷新率与温度。
 
